@@ -1,35 +1,27 @@
 # Visual Regression Testing POC
 
-Percy-like visual regression testing in two days. Captures DOM snapshots
-with Playwright, pixel-diffs with [`odiff`](https://github.com/dmtrKovalenko/odiff)
-(Rust-powered), and produces a self-contained HTML report that highlights
-diff regions and pinpoints which DOM element + computed style changed.
+Percy 類似的視覺迴歸測試，兩天內做完。用 Playwright 截圖、[`odiff`](https://github.com/dmtrKovalenko/odiff)（Rust）做 pixel diff，產出一份獨立的 HTML 報告，點 diff 區塊就能看到是哪個 DOM element 的哪個 computed style 改了。
 
-```
-┌─────────────┐    ┌──────────────┐    ┌───────────────┐
-│  Playwright │───▶│  odiff (Rust)│───▶│ Static HTML   │
-│  + DOM JSON │    │  + clustering│    │ Report (vanilla│
-│             │    │  + DOM diff  │    │  JS, no server)│
-└─────────────┘    └──────────────┘    └───────────────┘
-```
+![demo](./doc/demo.gif)
 
-## Quick start
+## Why
+
+- **Percy / Chromatic 太貴**，自架一套看看能走多遠
+- **「哪裡不一樣」還不夠，要知道「為什麼不一樣」** —— 一般 pixel diff 只告訴你哪塊紅了，這份 report 會告訴你是哪個 element、哪個 CSS property 從什麼變成什麼
+- **Report 完全靜態** —— 沒 server、沒 DB、沒 build step，zip 起來寄 email 都行
+
+## Getting Started
 
 ```bash
 pnpm install
-pnpm exec playwright install chromium       # first-time only
-pnpm demo:baseline                          # capture v1 as baseline
-pnpm demo:current                           # capture v2 as current
-pnpm vrt compare --open                     # diff and open report
-pnpm vrt approve                            # promote current → baseline
+pnpm exec playwright install chromium   # 第一次才需要
+
+pnpm demo:baseline                      # 截 v1 當 baseline
+pnpm demo:current                       # 截 v2 當 current
+pnpm vrt compare --open                 # diff 並開 report
 ```
 
-The `demo:*` scripts above wrap [`demo/v1`](demo/v1) and [`demo/v2`](demo/v2)
-to give you a one-command end-to-end run. For your own project, replace the
-demo test with a `takeSnapshot(page, 'home')` call inside any Playwright
-test.
-
-## Using the SDK in your tests
+接自己的專案就在 Playwright test 裡呼叫 `takeSnapshot(page, 'home')`：
 
 ```ts
 import { test } from '@playwright/test';
@@ -41,143 +33,36 @@ test('homepage', async ({ page }) => {
 });
 ```
 
-Then run:
+## How it works
 
-```bash
-VRT_TARGET=baseline pnpm exec playwright test  # before the change
-VRT_TARGET=current  pnpm exec playwright test  # after the change
-pnpm vrt compare --open
-```
-
-## CLI
-
-| Command | Description |
-| --- | --- |
-| `vrt capture --target <baseline\|current>` | Run Playwright tests with `VRT_TARGET` set; SDK writes to `screenshots/<target>/`. |
-| `vrt compare [--open]` | Diff baseline ↔ current and write a self-contained report to `reports/<timestamp>/index.html`. |
-| `vrt approve [name] [-y]` | Copy `screenshots/current/*` into `screenshots/baseline/`. Optional `name` filters by snapshot name. |
-
-## Configuration ([`vrt.config.ts`](vrt.config.ts))
-
-```ts
-export default {
-  viewports: [{ width: 1280, height: 720 }],
-  excludeSelectors: ['#clock', '.carousel', '[data-vrt-ignore]'],
-  computedStyleProps: ['backgroundColor', 'color', 'fontSize', /* ... */],
-  diffThreshold: 0.1,
-};
-```
-
-- **`excludeSelectors`** are double-protected: hidden via `visibility: hidden`
-  CSS injection at capture time _and_ skipped during DOM serialization, so
-  carousels, clocks, or `[data-vrt-ignore]` regions can't ever fail a diff.
-- **`computedStyleProps`** is a whitelist; only these properties are tracked
-  and shown in the Root Cause Analysis panel.
+- **Playwright + SDK** 截圖同時序列化 DOM（rect + 白名單的 computedStyle）
+- **odiff** 做 pixel diff，BFS 把紅點聚成 bounding boxes
+- **Root Cause Analysis**：拿 diff 區塊的座標去反查 DOM，挑「最深、重疊最多」的那個 element，比對它前後的 computedStyle，報告裡用 red/green diff 顯示
+- **Report** 是純靜態 HTML + vanilla JS，← / → 可以在 diff 區塊之間切換
 
 ## What the report shows
 
-1. **Side-by-side baseline / current** — the current panel has clickable
-   red overlays on every diff region.
-2. **Root Cause Analysis panel** — three columns:
-   - **HTML**: CSS selector + XPath + Copy button
-   - **Styles**: red/green diff of computedStyle properties
-     (`backgroundColor: rgb(245,247,250)` → `rgb(253,246,238)`)
-   - **Box Model**: x / y / width / height
-3. **Keyboard navigation**: ← / → cycles through diff regions.
-
-The report is fully static (no server, no DB, no build step). Open
-`reports/<timestamp>/index.html` directly in any browser, or zip the folder
-and email it.
+- **Side-by-side baseline / current**，current 面板上可點的紅色 overlay
+- **Root Cause Analysis panel**：HTML (selector + xpath) · Styles (red/green computedStyle diff) · Box Model
+- ← / → 在 diff 區塊之間切換
 
 ## Architecture
 
 ```
 src/
-├── cli.ts                       commander entry point
-├── sdk/
-│   ├── index.ts                 takeSnapshot(page, name)
-│   └── serializeDom.ts          browser-injected: rect + computedStyle
-├── engine/
-│   ├── compare.ts               orchestrator
-│   ├── imageDiff.ts             odiff-bin wrapper, returns diff mask
-│   ├── regionCluster.ts         BFS connected components → bounding boxes
-│   ├── coordDiff.ts             xpath-aligned shifted/resized/styled/deleted/new
-│   ├── crossAnalysis.ts         IoU-pick the deepest overlapping element
-│   └── types.ts
-├── report/
-│   ├── generate.ts              string-template HTML generator
-│   └── template/
-│       ├── index.html
-│       ├── viewer.js            click → RCA panel
-│       └── viewer.css
-└── dev/
-    └── makeFixtures.ts          synthetic snapshots for engine smoke testing
-
-screenshots/                     ← capture output, content-addressed by name+viewport
-reports/                         ← compare output, one folder per build
+├── sdk/        Playwright hook：截圖 + 序列化 DOM
+├── engine/    pixel diff + 聚類 + Root Cause 分析
+├── report/    靜態 HTML 報告生成器
+└── cli.ts     commander 入口
 ```
 
-## How "root cause" works
+檔案層級的說明、how RCA works、troubleshooting 都在 [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md)。
 
-For each diff region detected by odiff:
+## Tech Stack
 
-1. Convert the region (image-pixel coords) to CSS-pixel coords via the
-   captured `devicePixelRatio`.
-2. Find every DOM element whose `getBoundingClientRect` overlaps the region
-   by ≥ 10% of region area (or whose own area is ≥ 50% inside the region).
-3. Rank by **depth desc**, then by overlap-over-element-area — the deepest
-   tightly-overlapping element wins.
-4. Look up the winning element's xpath in the precomputed coord+style diff.
-   Show the user `styled` if any computedStyle changed, otherwise
-   `shifted`/`resized`/`deleted`/`new`. Pixel-only diffs (no tracked
-   property changed) are flagged `visualOnly`.
+TypeScript · Playwright · odiff (Rust) · 無框架 vanilla HTML report
 
-## Limitations / explicit non-goals (POC scope)
+## Notes
 
-- Single browser, single viewport at a time per snapshot name.
-- No font / Docker rendering normalization — diff baselines per-machine.
-- `xpath` strict-match for cross-build pairing; structural rewrites fall
-  through as "deleted + new".
-- No multi-snapshot sidebar (the report supports them via tabs but the demo
-  only ships one).
-- No GitHub Action, no diff slider, no auth — see PLAN.md for the deferred list.
-
-## Troubleshooting
-
-**Baseline and Current look identical in the report.** The viewer uses
-different JSON fields for each panel (`baselineImage` vs `currentImage`); if
-they look the same, the PNGs are effectively the same for this run. Check the
-tab label and `data.json`: `diffPercent: 0` and `regions: []` means odiff found
-no pixel differences above [`diffThreshold`](vrt.config.ts). Verify the inputs
-are really different:
-
-```bash
-shasum -a 256 screenshots/baseline/*.png screenshots/current/*.png
-```
-
-If hashes match, both captures were the same (e.g. same page state, or the same
-`VRT_DEMO_VERSION` twice). For the built-in demo, **v1 must go to baseline and
-v2 to current**: run `pnpm demo:baseline` then `pnpm demo:current` (or
-`pnpm demo` once), not two generic `vrt capture` runs that both default to v1.
-
-**`os.cpus()` returns `[]` and Playwright complains about
-`chrome-mac-x64`**: some sandboxed shells (incl. CI runners) report empty
-`os.cpus()`, so Playwright falls back to x64 paths. Set
-`PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=mac15-arm64` (or your true platform) to
-work around it.
-
-**`pngjs` "Unexpected end of input"**: you have `odiff-bin@3.x` which
-omits the IEND chunk. Upgrade to `odiff-bin@^4.0.0`.
-
-## Dev / fixtures
-
-If you want to iterate on the engine or the report UI without spinning up
-Playwright, use the synthetic fixture generator:
-
-```bash
-pnpm dev:fixtures              # writes baseline/current PNG + JSON pairs
-pnpm dev:fixtures:compare      # also runs compare and opens the report
-```
-
-This reproduces the screenshot in the original Percy mock — purple-nav vs
-red-nav, blue-CTA vs red-CTA — without ever launching a browser.
+- POC 範圍：單瀏覽器、單 viewport、沒做 font / Docker 渲染校正，baseline per-machine
+- 完整的限制、troubleshooting、dev fixtures 在 [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md)
