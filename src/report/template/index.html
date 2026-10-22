@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VRT Report — {{BUILD_ID}}</title>
+    <style>
+      {{INLINE_CSS}}
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <div class="title">Visual Regression Report</div>
+          <div class="meta">
+            build {{BUILD_ID}} · generated {{GENERATED_AT}}
+          </div>
+        </div>
+        <div class="stats">
+          <span class="stat-pill muted">{{SNAPSHOT_COUNT}} snapshot(s)</span>
+          <span class="stat-pill">{{TOTAL_REGIONS}} diff region(s)</span>
+          <span class="stat-pill">avg {{AVG_DIFF}}% diff</span>
+        </div>
+      </header>
+
+      <nav class="snapshot-tabs" id="snapshot-tabs"></nav>
+
+      <main>
+        <section class="viewer">
+          <div class="image-card">
+            <div class="label">
+              <span class="swatch"></span>Baseline
+            </div>
+            <div class="stage">
+              <img id="baseline-img" alt="baseline" />
+            </div>
+          </div>
+          <div class="image-card current">
+            <div class="label">
+              <span class="swatch"></span>Current — click a red box for details
+            </div>
+            <div class="stage">
+              <img id="current-img" alt="current" />
+              <div class="overlay" id="current-overlay"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="rca">
+          <div class="rca-header">
+            <span class="title" id="rca-title">Root Cause Analysis</span>
+            <span class="nav" id="rca-nav"></span>
+          </div>
+          <div class="rca-body">
+            <div class="rca-col" id="rca-html"></div>
+            <div class="rca-col" id="rca-styles"></div>
+            <div class="rca-col" id="rca-box"></div>
+          </div>
+        </section>
+
+        <section class="unattributed" aria-label="Unattributed DOM changes">
+          <div class="unattributed-header">
+            <span class="title" id="unattributed-title"
+              >Changes not tied to a diff region</span
+            >
+            <span class="count" id="unattributed-count"></span>
+          </div>
+          <div class="unattributed-body" id="unattributed-list"></div>
+        </section>
+      </main>
+
+      <footer>
+        Visual Regression POC · static report · use ← / → to navigate diff
+        regions
+      </footer>
+    </div>
+
+    <script type="application/json" id="report-data">
+      {{REPORT_DATA}}
+    </script>
+    <script>
+      {{INLINE_JS}}
+    </script>
+  </body>
+</html>

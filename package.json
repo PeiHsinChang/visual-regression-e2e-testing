@@ -1,0 +1,51 @@
+{
+  "name": "visual-regression-poc-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Percy-like visual regression testing POC: Playwright capture + odiff pixel compare + DOM root cause analysis.",
+  "bin": {
+    "vrt": "./src/cli.ts"
+  },
+  "scripts": {
+    "vrt": "tsx src/cli.ts",
+    "e2e:dev": "tsx watch src/e2e/server.ts",
+    "e2e:start": "tsx src/e2e/server.ts",
+    "test:e2e:unit": "tsx --test \"src/e2e/**/*.test.ts\"",
+    "test:e2e:pdp-preselect": "playwright test --config=playwright.e2e.config.ts preselect.spec.ts",
+    "test:demo": "playwright test --config=playwright.config.ts",
+    "demo:baseline": "VRT_BRAND=demo VRT_TARGET=baseline VRT_DEMO_VERSION=v1 pnpm test:demo",
+    "demo:current": "VRT_BRAND=demo VRT_TARGET=current VRT_DEMO_VERSION=v2 pnpm test:demo",
+    "demo": "pnpm demo:baseline && pnpm demo:current && VRT_BRAND=demo pnpm vrt compare --open",
+    "test:brand-b": "playwright test --config=playwright.brand-b.config.ts",
+    "brand-b:baseline": "VRT_BRAND=brand-b VRT_TARGET=baseline pnpm test:brand-b",
+    "brand-b:current": "VRT_BRAND=brand-b VRT_TARGET=current pnpm test:brand-b",
+    "brand-b": "pnpm brand-b:baseline && pnpm brand-b:current && VRT_BRAND=brand-b pnpm vrt compare --open",
+    "test:brand-a": "playwright test --config=playwright.brand-a.config.ts",
+    "brand-a:baseline": "VRT_BRAND=brand-a VRT_TARGET=baseline pnpm test:brand-a",
+    "brand-a:current": "VRT_BRAND=brand-a VRT_TARGET=current pnpm test:brand-a",
+    "brand-a": "pnpm brand-a:baseline && pnpm brand-a:current && VRT_BRAND=brand-a pnpm vrt compare --open",
+    "dev:fixtures": "tsx src/dev/makeFixtures.ts",
+    "dev:fixtures:compare": "pnpm dev:fixtures && pnpm vrt compare --open",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "odiff-bin": "^4.3.8",
+    "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^22.10.5",
+    "@types/pngjs": "^6.0.5",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "odiff-bin"
+    ]
+  }
+}
